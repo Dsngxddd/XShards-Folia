@@ -1,0 +1,24 @@
+# Configuration for Xshards plugin
+
+# Store settings
+store:
+  size: 54 # GUI size (9, 18, 27, 36, 45, 54)
+
+# Shard earning methods (enable/disable)
+earning:
+  playtime:
+    enabled: true
+    interval: 3600000 # Time interval in milliseconds (1 hour = 3600000 ms)
+    amount: 3 # Number of shards earned per interval
+  
+  kills:
+    enabled: true
+    amount: 10 # Number of shards earned per player kill
+    
+  afk:
+    enabled: true
+    interval: 30 # Seconds between earnings
+    amount: 1 # Number of shards earned per interval
+
+# PlaceholderAPI Integration
+placeholderapi: true

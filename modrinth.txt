@@ -1,0 +1,24 @@
+# Xshards Plugin
+
+Xshards is a comprehensive Minecraft plugin designed to manage a shard-based economy system, offering players multiple methods to earn shards and a customizable shop interface. 
+
+## Key Features:
+- **Shard Economy System**: Players can earn shards through various activities, with configurable earning rates and integration with PlaceholderAPI.
+- **Customizable Shop System**: Supports custom items with lore and model data, adjustable shop sizes, and a price editing system with a purchase confirmation interface.
+- **AFK System**: Allows players to earn shards while being AFK, with dedicated locations and anti-abuse measures.
+
+## Earning Methods:
+- **Playtime Rewards**: Earn shards by staying online.
+- **PvP Rewards**: Gain shards from player kills with a cooldown system.
+- **AFK Rewards**: Accumulate shards while in AFK mode.
+
+## Commands:
+Includes general commands for checking shard balance, opening the shop, and entering/exiting AFK mode, as well as admin commands for managing the shop and plugin configuration.
+
+## Permissions:
+Configurable permissions for basic and admin commands, ensuring a tailored experience for players and server administrators.
+
+## Installation:
+Simply download the plugin JAR file, place it in the server's `plugins` folder, and configure it as needed.
+
+For support and further details, please refer to the project's GitHub repository.

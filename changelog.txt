@@ -1,0 +1,27 @@
+Version 1.1.0 - Initial Release
+
+Features:
+- Implemented comprehensive shard economy system
+- Added multiple shard earning methods (playtime, PvP, AFK)
+- Created customizable shop system with GUI
+- Added support for custom items with lore and model data
+- Implemented AFK system with safe teleportation
+- Added PlaceholderAPI integration
+
+Changes:
+- Added configuration options for all earning methods
+- Implemented shop size configuration (9-54 slots)
+- Added price editing system for shop items
+- Created purchase confirmation interface
+- Added admin commands for plugin management
+- Implemented permission system
+- Added help command with detailed information
+- Created comprehensive configuration file
+
+Technical Updates:
+- Added support for custom item metadata
+- Implemented safe data saving system
+- Added reload command for configuration
+- Created tab completion for commands
+- Implemented proper event handling
+- Added proper cleanup on plugin disable
