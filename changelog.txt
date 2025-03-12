@@ -1,0 +1,47 @@
+Version 1.2.0 - AFK System Improvements
+
+Features:
+- Added persistent player location storage for AFK system
+- Improved AFK location handling after server restarts
+- Added automatic AFK data cleanup on server shutdown
+- Enhanced location restoration when quitting AFK mode
+
+Changes:
+- Players now return to their exact previous location after AFK
+- Location data persists through server restarts
+- Removed need for manual /quitafk after server restart
+- Added proper cleanup of AFK data on server shutdown
+
+Technical Updates:
+- Added playerlocations.yml for persistent location storage
+- Improved AFK data management system
+- Enhanced error handling for location saving/loading
+- Added automatic AFK state cleanup on server start
+
+Version 1.1.0 - Initial Release
+
+Features:
+- Implemented comprehensive shard economy system
+- Added multiple shard earning methods (playtime, PvP, AFK)
+- Created customizable shop system with GUI
+- Added support for custom items with lore and model data
+- Implemented AFK system with safe teleportation
+- Added PlaceholderAPI integration
+
+Changes:
+- Added configuration options for all earning methods
+- Implemented shop size configuration (9-54 slots)
+- Added price editing system for shop items
+- Created purchase confirmation interface
+- Added admin commands for plugin management
+- Implemented permission system
+- Added help command with detailed information
+- Created comprehensive configuration file
+
+Technical Updates:
+- Added support for custom item metadata
+- Implemented safe data saving system
+- Added reload command for configuration
+- Created tab completion for commands
+- Implemented proper event handling
+- Added proper cleanup on plugin disable
