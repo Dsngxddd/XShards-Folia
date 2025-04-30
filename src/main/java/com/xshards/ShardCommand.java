@@ -15,11 +15,32 @@ public class ShardCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        // Handle console commands
         if (!(sender instanceof Player)) {
-            sender.sendMessage("This command can only be run by players.");
-            return true;
+            // Console can only use the give command
+            if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
+                Player targetPlayer = Bukkit.getPlayer(args[1]);
+                if (targetPlayer == null) {
+                    sender.sendMessage("Player not found.");
+                    return true;
+                }
+
+                try {
+                    int amount = Integer.parseInt(args[2]);
+                    shardManager.addShards(targetPlayer, amount);
+                    sender.sendMessage("You have given " + amount + " shards to " + targetPlayer.getName() + ".");
+                    targetPlayer.sendMessage("You have received " + amount + " shards from Console!");
+                } catch (NumberFormatException e) {
+                    sender.sendMessage("Invalid amount. Please enter a number.");
+                }
+                return true;
+            } else {
+                sender.sendMessage("Console usage: /shards give <player> <amount>");
+                return true;
+            }
         }
 
+        // Handle player commands
         Player player = (Player) sender;
 
         // /shards command with no arguments: check the player's shard balance

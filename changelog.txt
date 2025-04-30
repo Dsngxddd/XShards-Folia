@@ -1,3 +1,19 @@
+Version 1.2.1 - Console Shard Management
+
+Features:
+- Added ability to give shards from console
+- Improved command handling for both console and players
+
+Changes:
+- Console can now use /shards give <player> <amount> command
+- Updated command usage descriptions
+- Improved feedback messages for console commands
+
+Technical Updates:
+- Enhanced command executor to handle non-player senders
+- Updated plugin version to 1.2.1
+- Improved command parameter validation
+
 Version 1.2.0 - AFK System Improvements
 
 Features:
