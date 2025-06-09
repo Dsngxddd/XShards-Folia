@@ -8,6 +8,7 @@ A comprehensive Minecraft plugin for managing a shard-based economy system with 
   - Multiple ways to earn shards
   - Configurable earning rates
   - PlaceholderAPI integration
+  - Database storage (SQLite or MySQL)
 
 - 🏪 **Customizable Shop System**
   - Support for custom items with lore and model data
@@ -15,11 +16,15 @@ A comprehensive Minecraft plugin for managing a shard-based economy system with 
   - Price editing system
   - Purchase confirmation interface
 
-- 💤 **Enhanced AFK System**
+- 💤 **Advanced AFK System**
   - Persistent location storage
   - Automatic return to previous location
+  - 5-second countdown with movement detection
+  - Free movement while in AFK mode
   - Safe teleportation system
   - Configurable earning rates
+  - Protection from damage while AFK
+  - Dedicated world support (recommended)
   - Seamless server restart handling
   - Anti-abuse measures
 
@@ -37,8 +42,10 @@ A comprehensive Minecraft plugin for managing a shard-based economy system with 
 3. **AFK Rewards**
    - Earn shards while in AFK mode
    - Configurable interval and amount
+   - 5-second countdown with movement detection
    - Safe teleportation system
    - Persistent location storage
+   - Dedicated world support for optimal performance
 
 ## Commands
 
@@ -65,6 +72,20 @@ A comprehensive Minecraft plugin for managing a shard-based economy system with 
 ## Configuration
 
 ```yaml
+# Storage configuration
+storage:
+  type: sqlite # Storage type: 'mysql' or 'sqlite'
+  # MySQL Configuration
+  mysql:
+    host: localhost
+    port: 3306
+    database: xshards
+    user: root
+    password: password
+  # SQLite Configuration
+  sqlite:
+    file: plugins/XShards/storage/xshards.db
+
 # Store settings
 store:
   size: 54  # GUI size (9, 18, 27, 36, 45, 54)
@@ -84,6 +105,8 @@ earning:
     enabled: true
     interval: 30  # seconds
     amount: 1
+    countdown: 5  # seconds to wait before teleporting
+    # We highly recommend setting up a dedicated world for AFK using MultiVerse-Core
 
 # PlaceholderAPI Integration
 placeholderapi: true

@@ -1,12 +1,10 @@
 package com.xshards;
 
-import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.ChatColor;
-import org.bukkit.scheduler.BukkitRunnable;
 
 public class AfkCommand implements CommandExecutor {
     private final AfkManager afkManager;
@@ -24,6 +22,12 @@ public class AfkCommand implements CommandExecutor {
 
         Player player = (Player) sender;
 
+        // Check if player has permission
+        if (!player.hasPermission("xshards.use")) {
+            player.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
+            return true;
+        }
+
         // Check if AFK earning is enabled
         if (!afkManager.getPlugin().getConfig().getBoolean("earning.afk.enabled", true)) {
             player.sendMessage(ChatColor.RED + "AFK mode is currently disabled.");
@@ -34,37 +38,15 @@ public class AfkCommand implements CommandExecutor {
             player.sendMessage(ChatColor.RED + "You are already in AFK mode. Use /quitafk to exit.");
             return true;
         }
+        
+        if (afkManager.isPendingAfk(player)) {
+            player.sendMessage(ChatColor.RED + "You are already in the process of entering AFK mode.");
+            return true;
+        }
 
-        player.sendMessage(ChatColor.YELLOW + "You will be teleported to the AFK location in 5 seconds. Don't move!");
-
-        Location initialLocation = player.getLocation();
-
-        new BukkitRunnable() {
-            int countdown = 5;
-
-            @Override
-            public void run() {
-                if (countdown > 0) {
-                    player.sendTitle(ChatColor.GREEN + "Teleporting in " + countdown + " seconds", 
-                                   ChatColor.YELLOW + "Don't move!", 10, 20, 10);
-                    countdown--;
-                } else {
-                    if (afkManager.hasPlayerMoved(player, initialLocation)) {
-                        player.sendMessage(ChatColor.RED + "Teleportation canceled because you moved.");
-                        cancel();
-                    } else {
-                        if (afkManager.getAfkLocation() != null) {
-                            afkManager.setAfk(player);
-                            player.sendMessage(ChatColor.GREEN + "You are now in AFK mode.");
-                        } else {
-                            player.sendMessage(ChatColor.RED + "AFK location is not set. Please set it using /setafk.");
-                        }
-                        cancel();
-                    }
-                }
-            }
-        }.runTaskTimer(afkManager.getPlugin(), 0, 20);
-
+        // Start the AFK process with the improved system
+        afkManager.startAfkProcess(player);
+        
         return true;
     }
 }

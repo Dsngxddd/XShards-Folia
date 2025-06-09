@@ -28,8 +28,12 @@ public class SetAfkCommand implements CommandExecutor {
         }
 
         // Set the AFK location to the player's current location
-        afkManager.setAfkLocation(player);  // Call setAfkLocation without needing a Location parameter
+        afkManager.setAfkLocation(player);
+        
+        // Provide additional information about recommended AFK world setup
         player.sendMessage(ChatColor.GREEN + "Your AFK location has been set to your current position!");
+        player.sendMessage(ChatColor.YELLOW + "Note: We recommend setting AFK location in a custom world for optimal performance.");
+        player.sendMessage(ChatColor.YELLOW + "You can use MultiVerse-Core plugin to create a dedicated AFK world.");
 
         return true; // Indicate the command was successful
     }

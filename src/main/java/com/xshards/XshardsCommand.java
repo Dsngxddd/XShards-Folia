@@ -26,8 +26,7 @@ public class XshardsCommand implements CommandExecutor {
                     sender.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
                     return true;
                 }
-                plugin.reloadConfig();
-                plugin.getShopManager().loadShopData();
+                plugin.reloadPlugin(); // Use the reloadPlugin method which handles database reconnection
                 sender.sendMessage(ChatColor.GREEN + "Xshards configuration reloaded!");
                 break;
 
@@ -72,6 +71,12 @@ public class XshardsCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.WHITE + "• Playtime: Earn shards by staying online");
         sender.sendMessage(ChatColor.WHITE + "• PvP: Earn shards from player kills");
         sender.sendMessage(ChatColor.WHITE + "• AFK: Earn shards while in AFK mode");
+        
+        // Storage Info
+        sender.sendMessage(ChatColor.GOLD + "\nStorage System:");
+        sender.sendMessage(ChatColor.WHITE + "• Current storage: " + 
+            ChatColor.YELLOW + plugin.getDatabaseManager().getStorageType().toUpperCase());
+        sender.sendMessage(ChatColor.WHITE + "• Configure in config.yml to use SQLite or MySQL");
 
         sender.sendMessage(ChatColor.GOLD + "================================");
     }

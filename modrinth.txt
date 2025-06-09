@@ -3,11 +3,15 @@
 Xshards is a comprehensive Minecraft plugin designed to manage a shard-based economy system, offering players multiple methods to earn shards and a customizable shop interface. 
 
 ## Key Features:
-- **Shard Economy System**: Players can earn shards through various activities, with configurable earning rates and integration with PlaceholderAPI.
+- **Shard Economy System**: Players can earn shards through various activities, with configurable earning rates and integration with PlaceholderAPI. Now with database storage support (SQLite or MySQL).
 - **Customizable Shop System**: Supports custom items with lore and model data, adjustable shop sizes, and a price editing system with a purchase confirmation interface.
-- **Enhanced AFK System**: 
+- **Advanced AFK System**: 
+  - 5-second countdown with movement detection
+  - Free movement while in AFK mode
   - Persistent location storage
   - Automatic return to previous location
+  - Protection from damage while AFK
+  - Dedicated world support (recommended)
   - Safe teleportation system
   - Configurable earning rates
   - Seamless server restart handling
@@ -15,7 +19,7 @@ Xshards is a comprehensive Minecraft plugin designed to manage a shard-based eco
 ## Earning Methods:
 - **Playtime Rewards**: Earn shards by staying online.
 - **PvP Rewards**: Gain shards from player kills with a cooldown system.
-- **AFK Rewards**: Accumulate shards while in AFK mode with improved location handling.
+- **AFK Rewards**: Accumulate shards while in AFK mode with countdown system, movement detection, and dedicated world support.
 
 ## Commands:
 Includes general commands for checking shard balance, opening the shop, and entering/exiting AFK mode, as well as admin commands for managing the shop and plugin configuration.
@@ -25,5 +29,8 @@ Configurable permissions for basic and admin commands, ensuring a tailored exper
 
 ## Installation:
 Simply download the plugin JAR file, place it in the server's `plugins` folder, and configure it as needed.
+
+## Database Storage:
+XShards now supports both SQLite (default) and MySQL database storage, providing improved data persistence and reliability. The plugin automatically creates the necessary database tables and handles all data operations seamlessly.
 
 For support and further details, please refer to the project's GitHub repository.

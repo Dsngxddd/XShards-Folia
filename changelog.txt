@@ -1,3 +1,33 @@
+Version 1.2.2 - Database Storage and AFK System Improvements
+
+Features:
+- Added database storage support (SQLite and MySQL)
+- Completely redesigned AFK system with countdown and movement detection
+- Added free movement while in AFK mode
+- Added protection from damage while in AFK mode
+- Added dedicated world support recommendations for AFK
+- Improved data persistence and reliability
+
+Changes:
+- Replaced YAML file storage with database storage
+- Added 5-second countdown with movement detection for AFK
+- Removed movement restrictions while in AFK mode
+- Added automatic database table creation
+- Added support for switching between SQLite and MySQL
+- Improved AFK teleportation safety
+- Added prevention of Nether/End AFK location setting
+- Reduced database connection logging spam
+
+Technical Updates:
+- Implemented DatabaseManager for handling database connections
+- Added proper connection pooling and error handling
+- Improved data loading and saving performance
+- Enhanced plugin stability with better data management
+- Added boss bar for AFK countdown
+- Improved database connection reliability
+- Optimized database connection reuse
+- Updated plugin version to 1.2.2
+
 Version 1.2.1 - Console Shard Management
 
 Features:

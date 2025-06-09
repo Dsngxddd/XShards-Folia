@@ -1,143 +1,299 @@
 package com.xshards;
 
+import com.xshards.utils.ActionBarUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.Sound;
 import org.bukkit.ChatColor;
+import org.bukkit.World.Environment;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.boss.BossBar;
 
-import java.io.File;
-import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Level;
 
 public class AfkManager {
     private final Xshards plugin;
     private final Map<UUID, AfkData> afkData;
-    private final File afkDataFile;
-    private final File afkLocationFile;
-    private final File playerLocationsFile;
-    private FileConfiguration afkDataConfig;
     private Location afkLocation;
     private final Map<UUID, Long> afkStartTime;
-    private FileConfiguration playerLocationsConfig;
+    private final DatabaseManager databaseManager;
+    private final Map<UUID, Location> pendingAfkTeleports;
+    private final Map<UUID, BukkitRunnable> afkCountdowns;
+    private final Map<UUID, BossBar> afkBossBars;
 
     public AfkManager(Xshards plugin) {
         this.plugin = plugin;
         this.afkData = new HashMap<>();
         this.afkStartTime = new HashMap<>();
-        this.afkDataFile = new File(plugin.getDataFolder(), "afkdata.yml");
-        this.afkLocationFile = new File(plugin.getDataFolder(), "afkmod.yml");
-        this.playerLocationsFile = new File(plugin.getDataFolder(), "playerlocations.yml");
-        loadAfkData();
+        this.databaseManager = plugin.getDatabaseManager();
+        this.pendingAfkTeleports = new HashMap<>();
+        this.afkCountdowns = new HashMap<>();
+        this.afkBossBars = new HashMap<>();
         loadAfkLocation();
-        loadPlayerLocations();
-    }
-
-    private void loadPlayerLocations() {
-        if (!playerLocationsFile.exists()) {
-            try {
-                playerLocationsFile.createNewFile();
-            } catch (IOException e) {
-                plugin.getLogger().severe("Could not create player locations file: " + e.getMessage());
-            }
-        }
-        playerLocationsConfig = YamlConfiguration.loadConfiguration(playerLocationsFile);
+        loadAfkData();
     }
 
     private void savePlayerLocation(Player player) {
-        String path = player.getUniqueId().toString();
+        UUID playerUUID = player.getUniqueId();
         Location loc = player.getLocation();
         
-        playerLocationsConfig.set(path + ".world", loc.getWorld().getName());
-        playerLocationsConfig.set(path + ".x", loc.getX());
-        playerLocationsConfig.set(path + ".y", loc.getY());
-        playerLocationsConfig.set(path + ".z", loc.getZ());
-        playerLocationsConfig.set(path + ".yaw", loc.getYaw());
-        playerLocationsConfig.set(path + ".pitch", loc.getPitch());
-        
-        try {
-            playerLocationsConfig.save(playerLocationsFile);
-        } catch (IOException e) {
-            plugin.getLogger().severe("Could not save player location: " + e.getMessage());
+        try (Connection conn = databaseManager.getConnection()) {
+            String sql = databaseManager.getStorageType().equals("mysql")
+                ? "INSERT INTO player_locations (uuid, world, x, y, z, yaw, pitch) VALUES (?, ?, ?, ?, ?, ?, ?) " +
+                  "ON DUPLICATE KEY UPDATE world = VALUES(world), x = VALUES(x), y = VALUES(y), z = VALUES(z), yaw = VALUES(yaw), pitch = VALUES(pitch)"
+                : "INSERT OR REPLACE INTO player_locations (uuid, world, x, y, z, yaw, pitch) VALUES (?, ?, ?, ?, ?, ?, ?)";
+                
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, playerUUID.toString());
+                stmt.setString(2, loc.getWorld().getName());
+                stmt.setDouble(3, loc.getX());
+                stmt.setDouble(4, loc.getY());
+                stmt.setDouble(5, loc.getZ());
+                stmt.setFloat(6, loc.getYaw());
+                stmt.setFloat(7, loc.getPitch());
+                stmt.executeUpdate();
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not save player location: " + e.getMessage());
         }
     }
 
     private Location getStoredPlayerLocation(Player player) {
-        String path = player.getUniqueId().toString();
-        if (!playerLocationsConfig.contains(path)) {
-            return null;
+        UUID playerUUID = player.getUniqueId();
+        
+        try (Connection conn = databaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT world, x, y, z, yaw, pitch FROM player_locations WHERE uuid = ?")) {
+            
+            stmt.setString(1, playerUUID.toString());
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                String worldName = rs.getString("world");
+                double x = rs.getDouble("x");
+                double y = rs.getDouble("y");
+                double z = rs.getDouble("z");
+                float yaw = rs.getFloat("yaw");
+                float pitch = rs.getFloat("pitch");
+                
+                if (worldName != null && Bukkit.getWorld(worldName) != null) {
+                    return new Location(Bukkit.getWorld(worldName), x, y, z, yaw, pitch);
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not get stored player location: " + e.getMessage());
         }
-
-        String worldName = playerLocationsConfig.getString(path + ".world");
-        if (worldName == null || Bukkit.getWorld(worldName) == null) {
-            return null;
-        }
-
-        double x = playerLocationsConfig.getDouble(path + ".x");
-        double y = playerLocationsConfig.getDouble(path + ".y");
-        double z = playerLocationsConfig.getDouble(path + ".z");
-        float yaw = (float) playerLocationsConfig.getDouble(path + ".yaw");
-        float pitch = (float) playerLocationsConfig.getDouble(path + ".pitch");
-
-        return new Location(Bukkit.getWorld(worldName), x, y, z, yaw, pitch);
+        
+        return null;
     }
 
     public void loadAfkLocation() {
-        if (plugin.getConfig().contains("afkLocation")) {
-            String worldName = plugin.getConfig().getString("afkLocation.world");
-            double x = plugin.getConfig().getDouble("afkLocation.x");
-            double y = plugin.getConfig().getDouble("afkLocation.y");
-            double z = plugin.getConfig().getDouble("afkLocation.z");
-            afkLocation = new Location(Bukkit.getWorld(worldName), x, y, z);
-        } else {
+        try (Connection conn = databaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT world, x, y, z FROM afk_location WHERE id = 1");
+             ResultSet rs = stmt.executeQuery()) {
+            
+            if (rs.next()) {
+                String worldName = rs.getString("world");
+                double x = rs.getDouble("x");
+                double y = rs.getDouble("y");
+                double z = rs.getDouble("z");
+                
+                if (worldName != null && Bukkit.getWorld(worldName) != null) {
+                    afkLocation = new Location(Bukkit.getWorld(worldName), x, y, z);
+                    plugin.getLogger().info("Loaded AFK location from database.");
+                } else {
+                    afkLocation = null;
+                    plugin.getLogger().warning("Could not load AFK location: world not found.");
+                }
+            } else {
+                afkLocation = null;
+                plugin.getLogger().info("No AFK location found in database.");
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not load AFK location: " + e.getMessage());
             afkLocation = null;
         }
     }
 
     public void removeAfkLocation() {
         afkLocation = null;
+        
+        try (Connection conn = databaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("DELETE FROM afk_location WHERE id = 1")) {
+            
+            stmt.executeUpdate();
+            plugin.getLogger().info("Removed AFK location from database.");
+            
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not remove AFK location: " + e.getMessage());
+        }
     }
 
     public void saveAfkLocation() {
         if (afkLocation != null) {
-            YamlConfiguration config = YamlConfiguration.loadConfiguration(afkLocationFile);
-            config.set("afkLocation.world", afkLocation.getWorld().getName());
-            config.set("afkLocation.x", afkLocation.getX());
-            config.set("afkLocation.y", afkLocation.getY());
-            config.set("afkLocation.z", afkLocation.getZ());
-            try {
-                config.save(afkLocationFile);
-            } catch (IOException e) {
-                plugin.getLogger().severe("Could not save AFK location: " + e.getMessage());
+            try (Connection conn = databaseManager.getConnection()) {
+                String sql = databaseManager.getStorageType().equals("mysql")
+                    ? "INSERT INTO afk_location (id, world, x, y, z) VALUES (1, ?, ?, ?, ?) " +
+                      "ON DUPLICATE KEY UPDATE world = VALUES(world), x = VALUES(x), y = VALUES(y), z = VALUES(z)"
+                    : "INSERT OR REPLACE INTO afk_location (id, world, x, y, z) VALUES (1, ?, ?, ?, ?)";
+                    
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setString(1, afkLocation.getWorld().getName());
+                    stmt.setDouble(2, afkLocation.getX());
+                    stmt.setDouble(3, afkLocation.getY());
+                    stmt.setDouble(4, afkLocation.getZ());
+                    stmt.executeUpdate();
+                    plugin.getLogger().info("Saved AFK location to database.");
+                }
+            } catch (SQLException e) {
+                plugin.getLogger().log(Level.SEVERE, "Could not save AFK location: " + e.getMessage());
             }
         }
     }
 
     public void setAfkLocation(Player player) {
-        afkLocation = player.getLocation();
-        saveAfkLocationToConfig();
-    }
-
-    private void saveAfkLocationToConfig() {
-        FileConfiguration config = plugin.getConfig();
-        config.set("afkLocation.world", afkLocation.getWorld().getName());
-        config.set("afkLocation.x", afkLocation.getX());
-        config.set("afkLocation.y", afkLocation.getY());
-        config.set("afkLocation.z", afkLocation.getZ());
-        plugin.saveConfig();
-    }
-
-    public void setAfk(Player player) {
-        if (!afkData.containsKey(player.getUniqueId())) {
-            savePlayerLocation(player);
-            teleportToAfk(player);
-            afkStartTime.put(player.getUniqueId(), System.currentTimeMillis());
+        // Check if the world is Nether or End
+        World world = player.getWorld();
+        if (world.getEnvironment() == Environment.NETHER || world.getEnvironment() == Environment.THE_END) {
+            player.sendMessage(ChatColor.RED + "You cannot set AFK location in the Nether or End worlds!");
+            player.sendMessage(ChatColor.YELLOW + "We recommend using a custom world for AFK (use MultiVerse-Core plugin).");
+            return;
         }
+        
+        afkLocation = player.getLocation();
+        saveAfkLocation();
+        player.sendMessage(ChatColor.GREEN + "AFK location has been set!");
+    }
+
+    public void startAfkProcess(Player player) {
+        UUID playerUUID = player.getUniqueId();
+        
+        // Check if player is already in AFK mode
+        if (isAfk(player)) {
+            player.sendMessage(ChatColor.RED + "You are already in AFK mode!");
+            return;
+        }
+        
+        // Check if AFK location is set
+        if (afkLocation == null) {
+            player.sendMessage(ChatColor.RED + "AFK location is not set! An admin needs to set it with /setafk");
+            return;
+        }
+        
+        // Save player's current location
+        savePlayerLocation(player);
+        
+        // Store initial location for movement check
+        final Location initialLocation = player.getLocation().clone();
+        pendingAfkTeleports.put(playerUUID, initialLocation);
+        
+        // Create boss bar for countdown
+        BossBar bossBar = Bukkit.createBossBar(
+            ChatColor.GOLD + "AFK Teleport in 5 seconds... Stand still!",
+            BarColor.YELLOW,
+            BarStyle.SOLID
+        );
+        bossBar.addPlayer(player);
+        afkBossBars.put(playerUUID, bossBar);
+        
+        // Start countdown
+        player.sendMessage(ChatColor.YELLOW + "Stand still! Teleporting to AFK in 5 seconds...");
+        
+        BukkitRunnable countdown = new BukkitRunnable() {
+            int seconds = 5;
+            
+            @Override
+            public void run() {
+                // Check if player moved
+                if (hasPlayerMoved(player, initialLocation)) {
+                    player.sendMessage(ChatColor.RED + "AFK teleport cancelled - you moved!");
+                    cancelAfkProcess(player);
+                    return;
+                }
+                
+                // Update boss bar
+                bossBar.setProgress(seconds / 5.0);
+                
+                if (seconds <= 0) {
+                    // Teleport player to AFK location
+                    completeAfkProcess(player);
+                    cancel();
+                } else {
+                    ActionBarUtil.sendActionBar(player, ChatColor.YELLOW + "AFK teleport in " + seconds + "...");
+                    seconds--;
+                }
+            }
+        };
+        
+        countdown.runTaskTimer(plugin, 0, 20);
+        afkCountdowns.put(playerUUID, countdown);
+    }
+    
+    private void completeAfkProcess(Player player) {
+        UUID playerUUID = player.getUniqueId();
+        
+        // Clean up countdown resources
+        if (afkBossBars.containsKey(playerUUID)) {
+            afkBossBars.get(playerUUID).removeAll();
+            afkBossBars.remove(playerUUID);
+        }
+        
+        pendingAfkTeleports.remove(playerUUID);
+        
+        // Teleport player to AFK location
+        player.teleport(afkLocation);
+        player.sendMessage(ChatColor.GREEN + "You are now in AFK mode!");
+        
+        // Set AFK status
+        afkData.put(playerUUID, new AfkData());
+        afkStartTime.put(playerUUID, System.currentTimeMillis());
+        
+        // Save to database
+        try (Connection conn = databaseManager.getConnection()) {
+            String sql = databaseManager.getStorageType().equals("mysql")
+                ? "INSERT INTO afk_status (uuid, is_afk, start_time) VALUES (?, 1, ?) " +
+                  "ON DUPLICATE KEY UPDATE is_afk = 1, start_time = VALUES(start_time)"
+                : "INSERT OR REPLACE INTO afk_status (uuid, is_afk, start_time) VALUES (?, 1, ?)";
+                
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, playerUUID.toString());
+                stmt.setLong(2, System.currentTimeMillis());
+                stmt.executeUpdate();
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not set player AFK status: " + e.getMessage());
+        }
+        
+        // Start shard earning
+        startAfkShardEarning(player);
+    }
+    
+    private void cancelAfkProcess(Player player) {
+        UUID playerUUID = player.getUniqueId();
+        
+        // Cancel countdown task
+        if (afkCountdowns.containsKey(playerUUID)) {
+            afkCountdowns.get(playerUUID).cancel();
+            afkCountdowns.remove(playerUUID);
+        }
+        
+        // Remove boss bar
+        if (afkBossBars.containsKey(playerUUID)) {
+            afkBossBars.get(playerUUID).removeAll();
+            afkBossBars.remove(playerUUID);
+        }
+        
+        pendingAfkTeleports.remove(playerUUID);
     }
 
     public Location getAfkLocation() {
@@ -150,82 +306,112 @@ public class AfkManager {
     }
 
     public boolean isAfk(Player player) {
-        return afkData.containsKey(player.getUniqueId());
-    }
-
-    public void setLastLocation(Player player, Location location) {
-        AfkData data = afkData.getOrDefault(player.getUniqueId(), new AfkData());
-        data.setLastLocation(location);
-        afkData.put(player.getUniqueId(), data);
-        saveAfkData();
-    }
-
-    public void saveAfkData() {
-        for (UUID uuid : afkData.keySet()) {
-            AfkData data = afkData.get(uuid);
-            afkDataConfig.set(uuid.toString() + ".lastLocation", data.getLastLocation());
+        UUID playerUUID = player.getUniqueId();
+        
+        // First check the in-memory cache
+        if (afkData.containsKey(playerUUID)) {
+            return true;
         }
-        try {
-            afkDataConfig.save(afkDataFile);
-        } catch (IOException e) {
-            plugin.getLogger().severe("Could not save AFK data: " + e.getMessage());
+        
+        // If not in cache, check the database
+        try (Connection conn = databaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT is_afk FROM afk_status WHERE uuid = ? AND is_afk = 1")) {
+            
+            stmt.setString(1, playerUUID.toString());
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                // If found in database, add to cache
+                afkData.put(playerUUID, new AfkData());
+                return true;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Error checking AFK status: " + e.getMessage());
         }
+        
+        return false;
+    }
+    
+    public boolean isPendingAfk(Player player) {
+        return pendingAfkTeleports.containsKey(player.getUniqueId());
     }
 
     public void loadAfkData() {
-        if (!afkDataFile.exists()) {
-            plugin.saveResource("afkdata.yml", false);
-        }
-        afkDataConfig = YamlConfiguration.loadConfiguration(afkDataFile);
-        for (String uuidStr : afkDataConfig.getKeys(false)) {
-            UUID uuid = UUID.fromString(uuidStr);
-            Location lastLocation = (Location) afkDataConfig.get(uuidStr + ".lastLocation");
-            afkData.put(uuid, new AfkData(lastLocation));
+        afkData.clear();
+        
+        try (Connection conn = databaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT uuid, start_time FROM afk_status WHERE is_afk = 1");
+             ResultSet rs = stmt.executeQuery()) {
+            
+            while (rs.next()) {
+                UUID playerUUID = UUID.fromString(rs.getString("uuid"));
+                long startTime = rs.getLong("start_time");
+                
+                afkData.put(playerUUID, new AfkData());
+                afkStartTime.put(playerUUID, startTime);
+            }
+            
+            plugin.getLogger().info("Loaded AFK data for " + afkData.size() + " players.");
+            
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not load AFK data: " + e.getMessage());
         }
     }
 
     public void removeAfkData(Player player) {
-        afkData.remove(player.getUniqueId());
-        afkStartTime.remove(player.getUniqueId());
-        saveAfkData();
-    }
-
-    public void teleportToAfk(Player player) {
-        if (afkLocation != null) {
-            player.teleport(afkLocation);
-            startAfkShardEarning(player);
-        } else {
-            player.sendMessage("AFK location is not set.");
+        UUID playerUUID = player.getUniqueId();
+        afkData.remove(playerUUID);
+        afkStartTime.remove(playerUUID);
+        
+        try (Connection conn = databaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("DELETE FROM afk_status WHERE uuid = ?")) {
+            
+            stmt.setString(1, playerUUID.toString());
+            stmt.executeUpdate();
+            
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not remove AFK data: " + e.getMessage());
         }
     }
 
     public void quitAfk(Player player) {
-        Location lastLocation = getLastLocation(player);
-        if (lastLocation != null) {
-            player.teleport(lastLocation);
+        if (isAfk(player)) {
+            Location lastLocation = getLastLocation(player);
+            if (lastLocation != null) {
+                player.teleport(lastLocation);
+                player.sendMessage(ChatColor.GREEN + "You have quit AFK mode.");
+            } else {
+                // If we can't find the last location, don't teleport the player
+                player.sendMessage(ChatColor.YELLOW + "You have quit AFK mode. Your previous location could not be found.");
+            }
+            // Always remove AFK data regardless of teleport success
             removeAfkData(player);
-            player.sendMessage("You have quit AFK mode.");
+        } else if (isPendingAfk(player)) {
+            // Cancel pending AFK teleport
+            cancelAfkProcess(player);
+            player.sendMessage(ChatColor.YELLOW + "AFK teleport cancelled.");
         } else {
-            player.sendMessage("You were not in AFK mode.");
+            player.sendMessage(ChatColor.RED + "You were not in AFK mode.");
         }
     }
 
     private void startAfkShardEarning(Player player) {
-        long afkEarnSeconds = plugin.getConfig().getLong("afkearnseconds", 30);
-        int afkAmount = plugin.getConfig().getInt("afkamount", 1);
+        long afkEarnSeconds = plugin.getConfig().getLong("earning.afk.interval", 30);
+        int afkAmount = plugin.getConfig().getInt("earning.afk.amount", 1);
 
         new BukkitRunnable() {
             int countdown = (int) afkEarnSeconds;
 
             @Override
             public void run() {
-                if (isAfk(player)) {
-                    player.sendTitle("", ChatColor.LIGHT_PURPLE + "EARN SHARDS IN " + countdown, 7, 12, 7);
+                if (isAfk(player) && player.isOnline()) {
+                    // Use action bar instead of title for less intrusive display
+                    ActionBarUtil.sendActionBar(player, ChatColor.LIGHT_PURPLE + "Earn shards in " + countdown + "s");
 
                     if (countdown <= 0) {
                         plugin.getShardManager().addShards(player, afkAmount);
                         player.sendMessage(ChatColor.GREEN + "You earned " + afkAmount + " shard(s) while AFK!");
-                        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
+                        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.5f, 1.0f);
                         countdown = (int) afkEarnSeconds;
                     } else {
                         countdown--;
@@ -239,9 +425,9 @@ public class AfkManager {
 
     public boolean hasPlayerMoved(Player player, Location initialLocation) {
         Location currentLocation = player.getLocation();
-        return initialLocation.getX() != currentLocation.getX() ||
-               initialLocation.getY() != currentLocation.getY() ||
-               initialLocation.getZ() != currentLocation.getZ();
+        double distanceSquared = initialLocation.distanceSquared(currentLocation);
+        // Allow very small movements (less than 0.1 blocks) to account for server-side adjustments
+        return distanceSquared > 0.01;
     }
 
     public Xshards getPlugin() {

@@ -1,5 +1,22 @@
 # Configuration for Xshards plugin
 
+# Storage configuration
+storage:
+  type: sqlite # Storage type: 'mysql' or 'sqlite'
+  # MySQL Configuration
+  # Uncomment the following lines to use MySQL instead of SQLite
+  # Make sure to configure your MySQL settings below
+  mysql:
+    host: localhost
+    port: 3306
+    database: xshards
+    user: root
+    password: password
+  # SQLite Configuration
+  # SQLite is used by default, so you can leave this as is
+  sqlite:
+    file: plugins/XShards/storage/xshards.db
+
 # Store settings
 store:
   size: 54 # GUI size (9, 18, 27, 36, 45, 54)
@@ -19,6 +36,9 @@ earning:
     enabled: true
     interval: 30 # Seconds between earnings
     amount: 1 # Number of shards earned per interval
+    countdown: 5 # Seconds to wait before teleporting to AFK location
+    # We highly recommend setting up a dedicated world for AFK using MultiVerse-Core
+    # This improves server performance and reduces potential bugs
 
 # PlaceholderAPI Integration
 placeholderapi: true
