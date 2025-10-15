@@ -25,6 +25,18 @@
             <id>placeholderapi</id>
             <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
         </repository>
+        <repository>
+            <id>sk89q-repo</id>
+            <url>https://maven.enginehub.org/repo/</url>
+        </repository>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+        <repository>
+            <id>arim-mvn-lgpl3</id>
+            <url>https://mvn-repo.arim.space/lesser-gpl3/</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -43,6 +55,17 @@
     <scope>provided</scope> <!-- Use provided scope for server plugins -->
         </dependency>
 
+        <dependency>
+            <groupId>space.arim.morepaperlib</groupId>
+            <artifactId>morepaperlib</artifactId>
+            <version>0.4.3</version>
+        </dependency>
+        <dependency>
+            <groupId>com.sk89q.worldguard</groupId>
+            <artifactId>worldguard-bukkit</artifactId>
+            <version>7.0.12 </version>
+            <scope>provided</scope>
+        </dependency>
         <!-- MySQL JDBC Driver -->
         <dependency>
             <groupId>com.mysql</groupId>
@@ -56,6 +79,7 @@
             <artifactId>sqlite-jdbc</artifactId>
             <version>3.45.1.0</version>
         </dependency>
+
     </dependencies>
 
     <build>

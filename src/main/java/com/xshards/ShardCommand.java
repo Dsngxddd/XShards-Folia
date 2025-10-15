@@ -1,75 +1,89 @@
 package com.xshards;
 
+import com.xshards.ShardManager;
+import com.xshards.utils.MessageManager;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+/**
+ * Command for checking and managing shards
+ */
 public class ShardCommand implements CommandExecutor {
-    private final ShardManager shardManager;
 
-    public ShardCommand(ShardManager shardManager) {
+    private final ShardManager shardManager;
+    private final MessageManager messages;
+
+    public ShardCommand(ShardManager shardManager, MessageManager messages) {
         this.shardManager = shardManager;
+        this.messages = messages;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         // Handle console commands
         if (!(sender instanceof Player)) {
-            // Console can only use the give command
             if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
-                Player targetPlayer = Bukkit.getPlayer(args[1]);
-                if (targetPlayer == null) {
-                    sender.sendMessage("Player not found.");
-                    return true;
-                }
-
-                try {
-                    int amount = Integer.parseInt(args[2]);
-                    shardManager.addShards(targetPlayer, amount);
-                    sender.sendMessage("You have given " + amount + " shards to " + targetPlayer.getName() + ".");
-                    targetPlayer.sendMessage("You have received " + amount + " shards from Console!");
-                } catch (NumberFormatException e) {
-                    sender.sendMessage("Invalid amount. Please enter a number.");
-                }
-                return true;
+                return handleGiveCommand(sender, args[1], args[2]);
             } else {
-                sender.sendMessage("Console usage: /shards give <player> <amount>");
+                messages.sendConsoleUsage(sender);
                 return true;
             }
         }
 
-        // Handle player commands
         Player player = (Player) sender;
 
-        // /shards command with no arguments: check the player's shard balance
+        // No args - show balance
         if (args.length == 0) {
-            int playerShards = shardManager.getShards(player);
-            player.sendMessage("You have " + playerShards + " shards.");
+            int shards = shardManager.getShards(player);
+            messages.sendShardsBalance(player, shards);
             return true;
         }
 
-        // /shards give <player> <amount>
-        if (args.length == 3 && args[0].equalsIgnoreCase("give") && player.hasPermission("xshards.admin")) {
-            Player targetPlayer = Bukkit.getPlayer(args[1]);
-            if (targetPlayer == null) {
-                player.sendMessage("Player not found.");
+        // Give command
+        if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
+            if (!player.hasPermission("xshards.admin")) {
+                messages.sendNoPermission(player);
                 return true;
             }
+            return handleGiveCommand(player, args[1], args[2]);
+        }
 
-            try {
-                int amount = Integer.parseInt(args[2]);
-                shardManager.addShards(targetPlayer, amount);
-                player.sendMessage("You have given " + amount + " shards to " + targetPlayer.getName() + ".");
-                targetPlayer.sendMessage("You have received " + amount + " shards from " + player.getName() + "!");
-            } catch (NumberFormatException e) {
-                player.sendMessage("Invalid amount. Please enter a number.");
-            }
+        // Invalid usage
+        player.sendMessage(messages.getPrefix() + "§cKullanım: /shards veya /shards give <oyuncu> <miktar>");
+        return true;
+    }
+
+    /**
+     * Handle giving shards to a player
+     */
+    private boolean handleGiveCommand(CommandSender sender, String targetName, String amountStr) {
+        // Find target player
+        Player target = Bukkit.getPlayer(targetName);
+        if (target == null) {
+            messages.sendPlayerNotFound(sender);
             return true;
         }
 
-        player.sendMessage("Usage: /shards or /shards give <player> <amount>");
+        // Parse amount
+        int amount;
+        try {
+            amount = Integer.parseInt(amountStr);
+        } catch (NumberFormatException e) {
+            messages.sendInvalidAmount(sender);
+            return true;
+        }
+
+        // Give shards
+        shardManager.addShards(target, amount);
+
+        // Send messages
+        String senderName = sender instanceof Player ? ((Player) sender).getName() : "Konsol";
+        messages.sendShardsGiven(sender, amount, target.getName());
+        messages.sendShardsReceived(target, amount, senderName);
+
         return true;
     }
 }

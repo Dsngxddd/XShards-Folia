@@ -1,5 +1,8 @@
 package com.xshards;
 
+import com.xshards.ProxyManager;
+import com.xshards.scheduler.SchedulerAdapter;
+import com.xshards.utils.MessageManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -11,12 +14,16 @@ public class Xshards extends JavaPlugin {
     private ShopManager shopManager;
     private AfkManager afkManager;
     private DatabaseManager databaseManager;
+    private SchedulerAdapter scheduler;
+    private MessageManager messageManager;
+    private WorldGuardManager worldGuardManager;
+    private ProxyManager proxyManager;
 
     @Override
     public void onEnable() {
         // Initialize ActionBarUtil
         com.xshards.utils.ActionBarUtil.initialize();
-        
+
         // Save the default config if it doesn't exist
         saveDefaultConfig();
 
@@ -26,25 +33,42 @@ public class Xshards extends JavaPlugin {
             storageDir.mkdirs();
         }
 
+        // Initialize scheduler adapter (Folia/Bukkit compatibility)
+        scheduler = new SchedulerAdapter(this);
+        getLogger().info("Running on " + (scheduler.isFolia() ? "Folia" : "Bukkit"));
+
+        // Initialize message manager
+        messageManager = new MessageManager(getConfig());
+
         // Initialize database manager first
         databaseManager = new DatabaseManager(this);
-        
-        // Initialize managers
-        shardManager = new ShardManager(this);
-        shopManager = new ShopManager(this);
-        afkManager = new AfkManager(this);
 
-        // Register commands and listeners
-        getCommand("shards").setExecutor(new ShardCommand(shardManager));
+        // Initialize WorldGuard manager
+        worldGuardManager = new WorldGuardManager(this);
+
+        // Initialize proxy manager
+        proxyManager = new ProxyManager(this, messageManager);
+
+        // Initialize managers with proper dependencies
+        shardManager = new ShardManager(this, databaseManager, scheduler, messageManager);
+        shopManager = new ShopManager(this);
+        afkManager = new AfkManager(this, scheduler, messageManager, worldGuardManager, proxyManager);
+
+        // Register commands
+        getCommand("shards").setExecutor(new ShardCommand(shardManager, messageManager));
         getCommand("store").setExecutor(new ShopCommand(shopManager));
-        getCommand("xshards").setExecutor(new XshardsCommand(this));
-        getCommand("afk").setExecutor(new AfkCommand(afkManager));
-        getCommand("setafk").setExecutor(new SetAfkCommand(afkManager));
-        getCommand("quitafk").setExecutor(new QuitAfkCommand(afkManager));
-        getCommand("afkremove").setExecutor(new AfkRemoveCommand(afkManager));
+        getCommand("xshards").setExecutor(new XshardsCommand(this, messageManager));
+        getCommand("afk").setExecutor(new AfkCommand(afkManager, messageManager));
+        getCommand("setafk").setExecutor(new SetAfkCommand(afkManager, messageManager));
+        getCommand("quitafk").setExecutor(new QuitAfkCommand(afkManager, messageManager));
+        getCommand("afkremove").setExecutor(new AfkRemoveCommand(afkManager, messageManager));
+
+        // Register listeners
         getServer().getPluginManager().registerEvents(new ShardListener(shardManager, this), this);
         getServer().getPluginManager().registerEvents(new ShopListener(shopManager, shardManager), this);
-        getServer().getPluginManager().registerEvents(new AfkListener(afkManager), this);
+        getServer().getPluginManager().registerEvents(
+                new AfkListener(afkManager, worldGuardManager, messageManager, scheduler), this
+        );
 
         // PlaceholderAPI integration
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
@@ -62,7 +86,8 @@ public class Xshards extends JavaPlugin {
             getLogger().warning("Failed to clear AFK status data: " + e.getMessage());
         }
 
-        getLogger().info("Xshards v1.2.2 has been enabled!");
+        getLogger().info("Xshards v2.0.0 has been enabled with " +
+                (scheduler.isFolia() ? "Folia" : "Bukkit") + " support!");
     }
 
     @Override
@@ -75,26 +100,35 @@ public class Xshards extends JavaPlugin {
                     afkManager.quitAfk(player);
                 }
             }
+            afkManager.shutdown();
         }
 
         // Save all data if managers were initialized
         if (shardManager != null) {
             shardManager.saveAllPlayerData();
         }
-        
+
         if (shopManager != null) {
             shopManager.saveShopData();
         }
-        
+
         // Close database connection
         if (databaseManager != null) {
             databaseManager.close();
         }
-        
+
+        // Cancel all scheduled tasks
+        if (scheduler != null) {
+            scheduler.cancelAllTasks();
+        }
+
+        // Shutdown proxy manager
+        if (proxyManager != null) {
+            proxyManager.shutdown();
+        }
+
         getLogger().info("Xshards has been disabled.");
     }
-
-    // No longer needed as we're not using YAML files
 
     public ShardManager getShardManager() {
         return this.shardManager;
@@ -107,28 +141,41 @@ public class Xshards extends JavaPlugin {
     public AfkManager getAfkManager() {
         return this.afkManager;
     }
-    
+
     public DatabaseManager getDatabaseManager() {
         return this.databaseManager;
     }
 
+    public SchedulerAdapter getScheduler() {
+        return this.scheduler;
+    }
+
+    public WorldGuardManager getWorldGuardManager() {
+        return this.worldGuardManager;
+    }
+
+    public ProxyManager getProxyManager() {
+        return this.proxyManager;
+    }
+
     public void reloadPlugin() {
         reloadConfig();
-        
+
+        // Reload message manager
+        messageManager = new MessageManager(getConfig());
+
         // Reload database connection if storage type changed
         String currentStorageType = databaseManager.getStorageType();
         String configStorageType = getConfig().getString("storage.type", "sqlite");
-        
+
         if (!currentStorageType.equals(configStorageType)) {
             getLogger().info("Storage type changed from " + currentStorageType + " to " + configStorageType + ". Reconnecting...");
             databaseManager.close();
             databaseManager = new DatabaseManager(this);
-            
+
             // Reload all data
             shardManager.loadAllPlayerData();
             shopManager.loadShopData();
-            afkManager.loadAfkData();
-            afkManager.loadAfkLocation();
         }
     }
 }

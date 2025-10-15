@@ -68,7 +68,7 @@ public class ShopListener implements Listener {
         if (event.getView().getTitle().equals("Confirm Purchase")) {
             event.setCancelled(true);
             Player player = (Player) event.getWhoClicked();
-            ShopItem pendingItem = shardManager.getPendingPurchase(player);
+            ShopItem pendingItem = (ShopItem) shardManager.getPendingPurchase(player);
 
             if (pendingItem != null && event.getCurrentItem() != null) {
                 if (event.getCurrentItem().getType() == Material.GREEN_WOOL) {

@@ -1,44 +1,127 @@
-# Configuration for Xshards plugin
+# XShards Configuration
+# Version: 2.0.0
 
-# Storage configuration
+# Database configuration
 storage:
-  type: sqlite # Storage type: 'mysql' or 'sqlite'
-  # MySQL Configuration
-  # Uncomment the following lines to use MySQL instead of SQLite
-  # Make sure to configure your MySQL settings below
-  mysql:
-    host: localhost
-    port: 3306
-    database: xshards
-    user: root
-    password: password
-  # SQLite Configuration
-  # SQLite is used by default, so you can leave this as is
+  # Storage type: 'sqlite' or 'mysql'
+  type: sqlite
+
+  # SQLite settings
   sqlite:
-    file: plugins/XShards/storage/xshards.db
+    file: "plugins/XShards/storage/xshards.db"
 
-# Store settings
-store:
-  size: 54 # GUI size (9, 18, 27, 36, 45, 54)
+  # MySQL settings (only used if type is 'mysql')
+  mysql:
+    host: "localhost"
+    port: 3306
+    database: "xshards"
+    user: "root"
+    password: "password"
 
-# Shard earning methods (enable/disable)
+# Shard earning methods
 earning:
+  # Playtime rewards
   playtime:
     enabled: true
-    interval: 3600000 # Time interval in milliseconds (1 hour = 3600000 ms)
-    amount: 3 # Number of shards earned per interval
-  
+    interval: 3600000  # 1 hour in milliseconds
+    amount: 3
+
+  # PvP kill rewards
   kills:
     enabled: true
-    amount: 10 # Number of shards earned per player kill
-    
+    amount: 10
+    cooldown: 86400000  # 24 hours in milliseconds per victim
+
+  # AFK rewards
   afk:
     enabled: true
-    interval: 30 # Seconds between earnings
-    amount: 1 # Number of shards earned per interval
-    countdown: 5 # Seconds to wait before teleporting to AFK location
-    # We highly recommend setting up a dedicated world for AFK using MultiVerse-Core
-    # This improves server performance and reduces potential bugs
+    interval: 30  # seconds
+    amount: 1
 
-# PlaceholderAPI Integration
-placeholderapi: true
+    # WorldGuard integration
+    worldguard:
+      enabled: false
+      # Region name where AFK can be activated
+      region: "afk-zone"
+      # If true, players must be in the region to earn AFK rewards
+      # If false, AFK location system will be used (old behavior)
+      require-region: true
+      # Auto-start AFK when entering region
+      auto-start: true
+      # Auto-stop AFK when leaving region
+      auto-stop: true
+
+    # Teleport countdown (seconds) before AFK starts
+    teleport-delay: 5
+    # Movement tolerance (blocks) during countdown
+    movement-tolerance: 0.1
+
+    # Cross-Server Support (BungeeCord/Velocity)
+    cross-server:
+      enabled: false
+      # Available AFK servers (will round-robin between them)
+      servers:
+        - "smpafk-1"
+        - "smpafk-2"
+        - "smpafk-3"
+      # Fallback server if all AFK servers are full
+      fallback-server: "lobby"
+      # Send players back to origin server when leaving AFK
+      return-to-origin: true
+
+# Shop configuration
+store:
+  size: 54  # Inventory size (9, 18, 27, 36, 45, or 54)
+  title: "Shard Shop"
+
+# Messages (supports color codes with &)
+messages:
+  prefix: "&8[&dXShards&8]&r "
+
+  # AFK messages
+  afk:
+    entering: "&eStand still! Teleporting to AFK in {seconds} seconds..."
+    cancelled-movement: "&cAFK teleport cancelled - you moved!"
+    started: "&aYou are now in AFK mode!"
+    already-afk: "&cYou are already in AFK mode!"
+    not-afk: "&cYou are not in AFK mode."
+    quit: "&aYou have quit AFK mode."
+    disabled: "&cAFK mode is currently disabled."
+    no-location: "&cAFK location is not set! An admin needs to set it with /setafk"
+    earned: "&aYou earned {amount} shard(s) while AFK!"
+
+    # WorldGuard messages
+    region-required: "&cYou must be in the AFK region to use this command!"
+    region-entered: "&aYou entered the AFK zone! Use /afk to start earning shards."
+    region-left: "&eYou left the AFK zone."
+    auto-started: "&aAFK mode automatically started!"
+    auto-stopped: "&eAFK mode automatically stopped."
+
+  # Admin messages
+  admin:
+    location-set: "&aAFK location has been set!"
+    location-removed: "&aThe AFK location has been removed!"
+    nether-end-blocked: "&cYou cannot set AFK location in the Nether or End!"
+    recommend-custom-world: "&eNote: We recommend setting AFK location in a custom world for optimal performance."
+    no-permission: "&cYou do not have permission to use this command."
+
+  # Shop messages
+  shop:
+    not-enough-shards: "&cYou don't have enough shards to purchase this item."
+    purchased: "&aYou have purchased {item} for {price} shards!"
+    cancelled: "&cPurchase canceled."
+    confirm-title: "Confirm Purchase"
+
+  # Shard messages
+  shards:
+    balance: "&aYou have &d{amount}&a shards."
+    earned: "&aYou earned &d{amount}&a shards!"
+    received: "&aYou have received &d{amount}&a shards from {sender}!"
+    given: "&aYou have given &d{amount}&a shards to {player}."
+
+  # Error messages
+  errors:
+    player-only: "&cThis command can only be executed by a player."
+    player-not-found: "&cPlayer not found."
+    invalid-amount: "&cInvalid amount. Please enter a number."
+    console-usage: "Console usage: /shards give <player> <amount>"

@@ -1,7 +1,9 @@
-name: Xshards
+name: Xshards-Folia
 version: 1.2.2
 main: com.xshards.Xshards
-api-version: 1.17
+author: Ak
+api-version: '1.21'
+folia-supported: true
 
 commands:
   shards:

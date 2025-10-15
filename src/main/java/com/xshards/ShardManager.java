@@ -1,5 +1,8 @@
 package com.xshards;
 
+import com.xshards.DatabaseManager;
+import com.xshards.scheduler.SchedulerAdapter;
+import com.xshards.utils.MessageManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -7,162 +10,213 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
+/**
+ * Manages player shard data
+ */
 public class ShardManager {
-    private final Xshards plugin;
-    private final Map<UUID, ShardData> playerData;
-    private final Map<UUID, ShopItem> pendingPurchases; // Map for pending purchases
+
     private final DatabaseManager databaseManager;
+    private final SchedulerAdapter scheduler;
+    private final MessageManager messages;
 
-    public ShardManager(Xshards plugin) {
-        this.plugin = plugin;
-        this.playerData = new HashMap<>();
-        this.pendingPurchases = new HashMap<>(); // Initialize pending purchases
-        this.databaseManager = plugin.getDatabaseManager();
-        loadAllPlayerData(); // Load data for all players initially
+    // Cache for player shard data
+    private final Map<UUID, Integer> shardCache;
+
+    // Pending shop purchases
+    private final Map<UUID, Object> pendingPurchases;
+
+    public ShardManager(org.bukkit.plugin.Plugin plugin, DatabaseManager databaseManager,
+                        SchedulerAdapter scheduler, MessageManager messages) {
+        this.databaseManager = databaseManager;
+        this.scheduler = scheduler;
+        this.messages = messages;
+        this.shardCache = new ConcurrentHashMap<>();
+        this.pendingPurchases = new ConcurrentHashMap<>();
+
+        loadAllPlayerData();
     }
 
-    // Add shards to a player's account
+    /**
+     * Add shards to a player
+     */
     public void addShards(Player player, int amount) {
-        UUID playerUUID = player.getUniqueId();
-        ShardData data = playerData.getOrDefault(playerUUID, new ShardData());
-        data.addShards(amount);
-        playerData.put(playerUUID, data);
-        player.sendMessage("You earned " + amount + " shards!");
-        savePlayerData(player); // Save player's data immediately after updating
+        UUID uuid = player.getUniqueId();
+
+        // Update cache
+        int current = shardCache.getOrDefault(uuid, 0);
+        int newAmount = current + amount;
+        shardCache.put(uuid, newAmount);
+
+        // Send message if amount is positive
+        if (amount > 0) {
+            messages.sendShardsEarned(player, amount);
+        }
+
+        // Save asynchronously
+        scheduler.runAsync(() -> savePlayerData(player));
     }
 
-    // Get the number of shards for a player
+    /**
+     * Get player's shard count
+     */
     public int getShards(Player player) {
-        UUID playerUUID = player.getUniqueId();
-        
-        // First check the in-memory cache
-        if (playerData.containsKey(playerUUID)) {
-            return playerData.get(playerUUID).getShards();
+        UUID uuid = player.getUniqueId();
+
+        // Check cache first
+        if (shardCache.containsKey(uuid)) {
+            return shardCache.get(uuid);
         }
-        
-        // If not in cache, load from database
+
+        // Load from database
         try (Connection conn = databaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("SELECT shards FROM player_shards WHERE uuid = ?")) {
-            
-            stmt.setString(1, playerUUID.toString());
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT shards FROM player_shards WHERE uuid = ?")) {
+
+            stmt.setString(1, uuid.toString());
             ResultSet rs = stmt.executeQuery();
-            
+
             if (rs.next()) {
                 int shards = rs.getInt("shards");
-                playerData.put(playerUUID, new ShardData(shards));
+                shardCache.put(uuid, shards);
                 return shards;
             }
         } catch (SQLException e) {
-            plugin.getLogger().warning("Error getting player shards: " + e.getMessage());
+            Bukkit.getLogger().warning("Error getting player shards: " + e.getMessage());
         }
-        
-        // If not found in database, return 0
-        playerData.put(playerUUID, new ShardData(0));
+
+        // Default to 0
+        shardCache.put(uuid, 0);
         return 0;
     }
 
-    // Save the data for a specific player
+    /**
+     * Set player's shard count
+     */
+    public void setShards(Player player, int amount) {
+        UUID uuid = player.getUniqueId();
+        shardCache.put(uuid, Math.max(0, amount));
+        scheduler.runAsync(() -> savePlayerData(player));
+    }
+
+    /**
+     * Save player data to database
+     */
     public void savePlayerData(Player player) {
-        UUID playerUUID = player.getUniqueId();
+        UUID uuid = player.getUniqueId();
         String playerName = player.getName();
-        int shards = playerData.getOrDefault(playerUUID, new ShardData()).getShards();
-        
+        int shards = shardCache.getOrDefault(uuid, 0);
+
+        try (Connection conn = databaseManager.getConnection()) {
+            String sql = databaseManager.getStorageType().equals("mysql")
+                    ? "INSERT INTO player_shards (uuid, player_name, shards) VALUES (?, ?, ?) " +
+                    "ON DUPLICATE KEY UPDATE player_name=VALUES(player_name), shards=VALUES(shards)"
+                    : "INSERT OR REPLACE INTO player_shards (uuid, player_name, shards) VALUES (?, ?, ?)";
+
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, uuid.toString());
+                stmt.setString(2, playerName);
+                stmt.setInt(3, shards);
+                stmt.executeUpdate();
+            }
+        } catch (SQLException e) {
+            Bukkit.getLogger().log(Level.SEVERE, "Could not save player data for " + playerName, e);
+        }
+    }
+
+    /**
+     * Load player data from database
+     */
+    public void loadPlayerData(Player player) {
+        UUID uuid = player.getUniqueId();
+
         try (Connection conn = databaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(
-                 databaseManager.getStorageType().equals("mysql") 
-                     ? "INSERT INTO player_shards (uuid, player_name, shards) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE player_name = VALUES(player_name), shards = VALUES(shards)"
-                     : "INSERT OR REPLACE INTO player_shards (uuid, player_name, shards) VALUES (?, ?, ?)"
-             )) {
-            
-            stmt.setString(1, playerUUID.toString());
-            stmt.setString(2, playerName);
-            stmt.setInt(3, shards);
-            stmt.executeUpdate();
-            
-        } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Could not save player data for " + playerName + "!", e);
-        }
-    }
+                     "SELECT shards FROM player_shards WHERE uuid = ?")) {
 
-    // Load data for a specific player
-    public void loadPlayerData(Player player) {
-        UUID playerUUID = player.getUniqueId();
-        
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("SELECT shards FROM player_shards WHERE uuid = ?")) {
-            
-            stmt.setString(1, playerUUID.toString());
+            stmt.setString(1, uuid.toString());
             ResultSet rs = stmt.executeQuery();
-            
+
             if (rs.next()) {
                 int shards = rs.getInt("shards");
-                playerData.put(playerUUID, new ShardData(shards));
+                shardCache.put(uuid, shards);
             } else {
-                // Player not found in database, create new entry with 0 shards
-                playerData.put(playerUUID, new ShardData(0));
-                savePlayerData(player); // Save the new player data
+                // New player
+                shardCache.put(uuid, 0);
+                savePlayerData(player);
             }
-            
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Could not load player data for " + player.getName() + "!", e);
-            // Default to 0 shards if there's an error
-            playerData.put(playerUUID, new ShardData(0));
+            Bukkit.getLogger().log(Level.SEVERE, "Could not load player data for " + player.getName(), e);
+            shardCache.put(uuid, 0);
         }
     }
 
-    // Save data for all players
+    /**
+     * Save all player data
+     */
     public void saveAllPlayerData() {
         try (Connection conn = databaseManager.getConnection()) {
             String sql = databaseManager.getStorageType().equals("mysql")
-                ? "INSERT INTO player_shards (uuid, player_name, shards) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE player_name = VALUES(player_name), shards = VALUES(shards)"
-                : "INSERT OR REPLACE INTO player_shards (uuid, player_name, shards) VALUES (?, ?, ?)";
-                
+                    ? "INSERT INTO player_shards (uuid, player_name, shards) VALUES (?, ?, ?) " +
+                    "ON DUPLICATE KEY UPDATE player_name=VALUES(player_name), shards=VALUES(shards)"
+                    : "INSERT OR REPLACE INTO player_shards (uuid, player_name, shards) VALUES (?, ?, ?)";
+
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                for (Map.Entry<UUID, ShardData> entry : playerData.entrySet()) {
-                    UUID playerUUID = entry.getKey();
-                    Player player = Bukkit.getPlayer(playerUUID);
-                    
+                for (Map.Entry<UUID, Integer> entry : shardCache.entrySet()) {
+                    Player player = Bukkit.getPlayer(entry.getKey());
                     if (player != null) {
-                        stmt.setString(1, playerUUID.toString());
+                        stmt.setString(1, entry.getKey().toString());
                         stmt.setString(2, player.getName());
-                        stmt.setInt(3, entry.getValue().getShards());
-                        stmt.executeUpdate();
+                        stmt.setInt(3, entry.getValue());
+                        stmt.addBatch();
                     }
                 }
+                stmt.executeBatch();
             }
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Could not save all player data!", e);
+            Bukkit.getLogger().log(Level.SEVERE, "Could not save all player data", e);
         }
     }
 
-    // Load data for all players (used at startup or if needed to load full data)
+    /**
+     * Load all player data (for online players)
+     */
     public void loadAllPlayerData() {
-        // Clear existing data
-        playerData.clear();
-        
-        // Load data for online players
+        shardCache.clear();
         for (Player player : Bukkit.getOnlinePlayers()) {
             loadPlayerData(player);
         }
-        
-        // We don't need to load offline players' data until they join
     }
 
-    // Pending purchase methods
-    public void setPendingPurchase(Player player, ShopItem item) {
+    /**
+     * Set pending purchase for a player
+     */
+    public void setPendingPurchase(Player player, Object item) {
         pendingPurchases.put(player.getUniqueId(), item);
     }
 
-    public ShopItem getPendingPurchase(Player player) {
+    /**
+     * Get pending purchase for a player
+     */
+    public Object getPendingPurchase(Player player) {
         return pendingPurchases.get(player.getUniqueId());
     }
 
+    /**
+     * Clear pending purchase for a player
+     */
     public void clearPendingPurchase(Player player) {
         pendingPurchases.remove(player.getUniqueId());
+    }
+
+    /**
+     * Get cached shard data
+     */
+    public Map<UUID, Integer> getShardCache() {
+        return shardCache;
     }
 }

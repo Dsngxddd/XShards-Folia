@@ -1,52 +1,65 @@
 package com.xshards;
 
-import org.bukkit.entity.Player;
+import com.xshards.Xshards;
+import com.xshards.AfkManager;
+import com.xshards.utils.MessageManager;
 import org.bukkit.command.Command;
-import org.bukkit.command.CommandSender;
 import org.bukkit.command.CommandExecutor;
-import org.bukkit.ChatColor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
+/**
+ * Command to enter AFK mode
+ */
 public class AfkCommand implements CommandExecutor {
-    private final AfkManager afkManager;
 
-    public AfkCommand(AfkManager afkManager) {
+    private final AfkManager afkManager;
+    private final MessageManager messages;
+    private final Xshards plugin;
+
+    public AfkCommand(AfkManager afkManager, MessageManager messages) {
         this.afkManager = afkManager;
+        this.messages = messages;
+        this.plugin = (Xshards) afkManager.getPlugin();
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        // Must be a player
         if (!(sender instanceof Player)) {
-            sender.sendMessage(ChatColor.RED + "This command can only be executed by a player.");
+            messages.sendPlayerOnly(sender);
             return true;
         }
 
         Player player = (Player) sender;
 
-        // Check if player has permission
+        // Check permission
         if (!player.hasPermission("xshards.use")) {
-            player.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
+            messages.sendNoPermission(player);
             return true;
         }
 
-        // Check if AFK earning is enabled
-        if (!afkManager.getPlugin().getConfig().getBoolean("earning.afk.enabled", true)) {
-            player.sendMessage(ChatColor.RED + "AFK mode is currently disabled.");
+        // Check if AFK is enabled
+        if (!plugin.getConfig().getBoolean("earning.afk.enabled", true)) {
+            messages.sendAfkDisabled(player);
             return true;
         }
 
+        // Check if already AFK
         if (afkManager.isAfk(player)) {
-            player.sendMessage(ChatColor.RED + "You are already in AFK mode. Use /quitafk to exit.");
-            return true;
-        }
-        
-        if (afkManager.isPendingAfk(player)) {
-            player.sendMessage(ChatColor.RED + "You are already in the process of entering AFK mode.");
+            messages.sendAfkAlready(player);
             return true;
         }
 
-        // Start the AFK process with the improved system
+        // Check if already pending
+        if (afkManager.isPendingAfk(player)) {
+            messages.send(player, "afk.cancelled-movement");
+            return true;
+        }
+
+        // Start AFK process
         afkManager.startAfkProcess(player);
-        
+
         return true;
     }
 }
